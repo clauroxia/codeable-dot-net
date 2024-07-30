@@ -10,7 +10,6 @@ public static class CachedInventoryApiBuilder
     var builder = WebApplication.CreateBuilder(args);
     var cache = new ConcurrentDictionary<int, int>();
     var timers = new ConcurrentDictionary<int, Timer>();
-    var semaphores = new ConcurrentDictionary<int, SemaphoreSlim>();
 
     // Add services to the container.
     builder.Services.AddEndpointsApiExplorer();
@@ -20,7 +19,6 @@ public static class CachedInventoryApiBuilder
     // Inject the cache object and other dictionaries into the service container
     builder.Services.AddSingleton(cache);
     builder.Services.AddSingleton(timers);
-    builder.Services.AddSingleton(semaphores);
 
     var app = builder.Build();
 
@@ -51,11 +49,8 @@ public static class CachedInventoryApiBuilder
 
     app.MapPost(
       "/stock/retrieve",
-      async ([FromServices] IWarehouseStockSystemClient client, [FromServices] ConcurrentDictionary<int, int> cache, [FromServices] ConcurrentDictionary<int, Timer> timers, [FromServices] ConcurrentDictionary<int, SemaphoreSlim> semaphores, [FromBody] RetrieveStockRequest req) =>
+      async ([FromServices] IWarehouseStockSystemClient client, [FromServices] ConcurrentDictionary<int, int> cache, [FromServices] ConcurrentDictionary<int, Timer> timers, [FromBody] RetrieveStockRequest req) =>
       {
-        var semaphore = semaphores.GetOrAdd(req.ProductId, new SemaphoreSlim(1, 1));
-        await semaphore.WaitAsync();
-
         try
         {
           if (cache.TryGetValue(req.ProductId, out var cachedStock) && cachedStock >= req.Amount)
@@ -76,20 +71,15 @@ public static class CachedInventoryApiBuilder
           return Results.Ok();
         }
         finally
-        {
-          semaphore.Release();
-        }
+        {}
       })
       .WithName("RetrieveStock")
       .WithOpenApi();
 
     app.MapPost(
       "/stock/restock",
-      async ([FromServices] IWarehouseStockSystemClient client, [FromServices] ConcurrentDictionary<int, int> cache, [FromServices] ConcurrentDictionary<int, Timer> timers, [FromServices] ConcurrentDictionary<int, SemaphoreSlim> semaphores, [FromBody] RestockRequest req) =>
+      async ([FromServices] IWarehouseStockSystemClient client, [FromServices] ConcurrentDictionary<int, int> cache, [FromServices] ConcurrentDictionary<int, Timer> timers, [FromBody] RestockRequest req) =>
       {
-        var semaphore = semaphores.GetOrAdd(req.ProductId, new SemaphoreSlim(1, 1));
-        await semaphore.WaitAsync();
-
         try
         {
           var stock = await client.GetStock(req.ProductId);
@@ -98,9 +88,7 @@ public static class CachedInventoryApiBuilder
           return Results.Ok();
         }
         finally
-        {
-          semaphore.Release();
-        }
+        {}
       })
       .WithName("Restock")
       .WithOpenApi();
